@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgriSense — Simulation</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body class="page-sim">
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M16 29V13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M16 15C10 15 6 11 6 5c6 0 10 4 10 10Z" fill="currentColor" opacity=".85"/>
+      <path d="M16 20c6 0 10-4 10-10-6 0-10 4-10 10Z" fill="currentColor" opacity=".5"/>
+    </svg>
+    <div>
+      <h1>AgriSense</h1>
+      <p class="sub">Simulation console</p>
+    </div>
+  </div>
+
+  <nav class="topnav" aria-label="Sections">
+    <a href="/dashboard">Dashboard</a>
+    <a href="/simulation" class="on">Simulation</a>
+  </nav>
+
+  <div class="clock-block">
+    <div class="sim-time" id="simTime">--:--:--</div>
+    <div class="sim-date"><span id="simDate">—</span> · <span id="simDay">day —</span></div>
+  </div>
+
+  <div class="speed-control" role="group" aria-label="Simulation speed">
+    <button class="icon-btn" id="btnPause" title="Pause / resume simulation" aria-label="Pause">❚❚</button>
+    <input type="range" id="speed" min="0" max="6" step="1" value="4" aria-label="Simulation speed">
+    <output id="speedOut">60×</output>
+  </div>
+
+  <div class="conn" id="conn" data-state="connecting">
+    <span class="dot"></span><span id="connText">connecting</span>
+  </div>
+</header>
+
+<main class="sim-grid">
+
+  <!-- ================= Clock & transport ================= -->
+  <section class="panel span-2" aria-label="Clock control">
+    <div class="panel-head">
+      <h2>Clock</h2>
+      <span class="tag" id="clockTag">—</span>
+      <div class="btn-row tight">
+        <button id="step1m" title="Advance one simulated minute">+1 min</button>
+        <button id="step10m" title="Advance ten simulated minutes">+10 min</button>
+        <button id="step1h" class="primary" title="Advance one simulated hour">+1 h</button>
+        <button id="step6h" title="Advance six simulated hours">+6 h</button>
+      </div>
+    </div>
+    <div class="speed-presets" id="speedPresets" role="group" aria-label="Speed presets"></div>
+    <dl class="kv" id="clockStats"></dl>
+    <p class="hint">Stepping runs the engine forward by hand in ≤10-minute slices, ignoring
+      the wall clock — pause, step, and read one rule transition at a time.</p>
+  </section>
+
+  <!-- ================= Rule thresholds ================= -->
+  <section class="panel span-2" aria-label="Rule thresholds">
+    <div class="panel-head">
+      <h2>Rule thresholds</h2>
+      <div class="switch-row" role="group" aria-label="Automation switches">
+        <label class="switch"><input type="checkbox" id="tgAuto" checked><span>Auto</span></label>
+        <label class="switch"><input type="checkbox" id="tgSpray" checked><span>Spray</span></label>
+        <label class="switch"><input type="checkbox" id="tgIrr" checked><span>Irrigate</span></label>
+      </div>
+      <span class="tag" id="ruleTag">—</span>
+      <button id="ruleReset" class="ghost">Reset to defaults</button>
+    </div>
+    <div class="tunables" id="ruleTunables"></div>
+    <p class="hint" id="ruleFlash">Bounds are enforced server-side; a value the engine
+      clamps comes back corrected.</p>
+  </section>
+
+  <!-- ================= Scenarios: weather ================= -->
+  <section class="panel span-2" aria-label="Weather scenarios">
+    <div class="panel-head">
+      <h2>Weather scenarios</h2>
+      <span class="tag" id="scenTag">model driven</span>
+      <button id="scenRelease" class="ghost">Release to model</button>
+    </div>
+    <div class="scen-grid" id="scenWeather"></div>
+    <p class="hint">Forced weather replaces the generator for a fixed number of simulated
+      hours, including the derived quantities — a forced overcast cannot keep 900 W/m².
+      Each preset targets a specific interlock in the spray rule.</p>
+  </section>
+
+  <!-- ================= Scenarios: field ================= -->
+  <section class="panel" aria-label="Field scenarios">
+    <div class="panel-head"><h2>Field scenarios</h2></div>
+    <div class="form-row">
+      <label for="scenArea">Scope</label>
+      <select id="scenArea"></select>
+    </div>
+    <div class="form-row">
+      <label for="scenPressure">Pest level</label>
+      <input type="range" id="scenPressure" min="10" max="99" step="1" value="85">
+      <output id="scenPressureOut">85%</output>
+    </div>
+    <div class="btn-row wrap">
+      <button id="scenPests" class="primary">Inject pests</button>
+      <button id="scenDry">Dry out root zone</button>
+      <button id="scenWet">Flood root zone</button>
+    </div>
+    <p class="hint" id="scenStatus">idle</p>
+  </section>
+
+  <!-- ================= Scenarios: faults ================= -->
+  <section class="panel" aria-label="Device faults">
+    <div class="panel-head">
+      <h2>Device faults</h2>
+      <span class="badge" id="scenFaults">all devices online</span>
+    </div>
+    <div class="form-row">
+      <label for="faultDevice">Device</label>
+      <select id="faultDevice"></select>
+    </div>
+    <div class="form-row">
+      <label for="faultKind">Fault</label>
+      <select id="faultKind"></select>
+    </div>
+    <div class="btn-row"><button id="scenFault" class="danger-btn">Inject fault</button></div>
+    <p class="hint">A faulted probe stops publishing and raises a critical alert; a
+      faulted camera stops rendering, so the fleet table and the detector fall quiet
+      together.</p>
+  </section>
+
+  <!-- ================= Manual commands ================= -->
+  <section class="panel" aria-label="Manual device commands">
+    <div class="panel-head">
+      <h2>Manual commands</h2>
+      <span class="tag" id="cmdZoneState">all zones closed</span>
+    </div>
+
+    <h3 class="mini-head">Irrigation</h3>
+    <div class="form-row">
+      <label for="cmdZone">Zone</label>
+      <select id="cmdZone"></select>
+    </div>
+    <div class="form-row">
+      <label for="cmdMm">Target depth</label>
+      <input type="range" id="cmdMm" min="5" max="40" step="1" value="20">
+      <output id="cmdMmOut">20 mm</output>
+    </div>
+    <div class="btn-row">
+      <button id="cmdOpen" class="primary">Open zone</button>
+      <button id="cmdClose">Close zone</button>
+    </div>
+
+    <h3 class="mini-head">Drone</h3>
+    <div class="form-row">
+      <label for="cmdArea">Target</label>
+      <select id="cmdArea"></select>
+    </div>
+    <div class="form-row">
+      <label for="cmdDose">Dose</label>
+      <input type="range" id="cmdDose" min="10" max="120" step="1" value="35">
+      <output id="cmdDoseOut">0.35 L/ha</output>
+    </div>
+    <div class="btn-row wrap">
+      <button id="cmdPlan" class="primary">Plan mission</button>
+      <button id="cmdRth">Return home</button>
+      <button id="cmdAbort" class="danger-btn">Abort</button>
+    </div>
+    <p class="hint">Flight state: <b id="cmdDroneState">idle</b></p>
+    <p class="hint" id="cmdFlash">—</p>
+  </section>
+
+  <!-- ================= Rule decisions ================= -->
+  <section class="panel" aria-label="Rule decisions">
+    <div class="panel-head"><h2>Rule decisions</h2></div>
+    <ul class="decisions" id="decisions"></ul>
+    <p class="hint">Every rule that acts, holds or waits. Each control above predicts a
+      line here — holds are the interesting ones.</p>
+  </section>
+
+  <!-- ================= Alerts ack ================= -->
+  <section class="panel" aria-label="Alerts">
+    <div class="panel-head">
+      <h2>Alerts</h2>
+      <button id="btnAckAll" class="ghost">Acknowledge all</button>
+    </div>
+    <ul class="alerts" id="alerts"></ul>
+  </section>
+
+  <!-- ================= Engine internals ================= -->
+  <section class="panel span-2" aria-label="Engine internals">
+    <div class="panel-head">
+      <h2>Engine internals</h2>
+      <button id="engineRefresh" class="ghost">Refresh</button>
+    </div>
+    <div class="readouts" id="engineStats"></div>
+    <table class="kv-table">
+      <thead><tr><th>Runtime</th><th>Value</th></tr></thead>
+      <tbody id="engineRows"></tbody>
+    </table>
+    <h3 class="mini-head">Injected faults</h3>
+    <table class="kv-table">
+      <thead><tr><th>Device</th><th>Detail</th></tr></thead>
+      <tbody id="engineFaults"><tr><td colspan="2" class="empty">no faults injected</td></tr></tbody>
+    </table>
+    <div class="form-row">
+      <label for="engineTopics">Topic filter</label>
+      <select id="engineTopics"></select>
+    </div>
+  </section>
+
+  <!-- ================= Event stream ================= -->
+  <section class="panel span-2" aria-label="Bus events">
+    <div class="panel-head">
+      <h2>Bus events</h2>
+      <input type="search" id="eventFilter" class="filter-input" placeholder="filter by topic or event…">
+    </div>
+    <div class="event-table-wrap">
+      <table class="event-table">
+        <thead><tr><th>Time</th><th>Topic</th><th>Event</th></tr></thead>
+        <tbody id="eventRows"></tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <span id="footStats">—</span>
+  <span class="grow"></span>
+  <span id="footTopic">agri/green-valley-01/#</span>
+</footer>
+
+<script type="module" src="/static/js/simulation.js"></script>
+</body>
+</html>

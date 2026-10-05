@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgriSense — Dashboard</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M16 29V13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M16 15C10 15 6 11 6 5c6 0 10 4 10 10Z" fill="currentColor" opacity=".85"/>
+      <path d="M16 20c6 0 10-4 10-10-6 0-10 4-10 10Z" fill="currentColor" opacity=".5"/>
+    </svg>
+    <div>
+      <h1>AgriSense</h1>
+      <p class="sub" id="farmName">Green Valley Farms</p>
+    </div>
+  </div>
+
+  <nav class="topnav" aria-label="Sections">
+    <a href="/dashboard" class="on">Dashboard</a>
+    <a href="/simulation">Simulation</a>
+  </nav>
+
+  <div class="clock-block">
+    <div class="sim-time" id="simTime">--:--:--</div>
+    <div class="sim-date"><span id="simDate">—</span> · <span id="simDay">day —</span></div>
+  </div>
+
+  <div class="speed-control" role="group" aria-label="Simulation speed">
+    <button class="icon-btn" id="btnPause" title="Pause / resume simulation" aria-label="Pause">❚❚</button>
+    <input type="range" id="speed" min="0" max="6" step="1" value="4" aria-label="Simulation speed">
+    <output id="speedOut">60×</output>
+  </div>
+
+  <div class="conn" id="conn" data-state="connecting">
+    <span class="dot"></span><span id="connText">connecting</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ================= KPI strip ================= -->
+  <section class="kpis" aria-label="Farm key indicators">
+    <article class="kpi" data-k="moisture">
+      <h3>Soil moisture</h3>
+      <p class="value"><span id="kMoisture">—</span><small>%</small></p>
+      <p class="sub" id="kMoistureSub">min / avg / max</p>
+      <div class="bar"><i id="barMoisture"></i></div>
+    </article>
+    <article class="kpi" data-k="pest">
+      <h3>Pest pressure</h3>
+      <p class="value"><span id="kPest">—</span><small>%</small></p>
+      <p class="sub" id="kPestSub">peak across 38 plots</p>
+      <div class="bar"><i id="barPest"></i></div>
+    </article>
+    <article class="kpi" data-k="health">
+      <h3>Crop health</h3>
+      <p class="value"><span id="kHealth">—</span><small>%</small></p>
+      <p class="sub" id="kHealthSub">canopy · yield loss</p>
+      <div class="bar"><i id="barHealth"></i></div>
+    </article>
+    <article class="kpi" data-k="water">
+      <h3>Water tank</h3>
+      <p class="value"><span id="kTank">—</span><small>%</small></p>
+      <p class="sub" id="kTankSub">L used today</p>
+      <div class="bar"><i id="barTank"></i></div>
+    </article>
+    <article class="kpi" data-k="drone">
+      <h3>Drone</h3>
+      <p class="value" id="kDrone">idle</p>
+      <p class="sub" id="kDroneSub">battery · payload</p>
+      <div class="bar"><i id="barBattery"></i></div>
+    </article>
+    <article class="kpi" data-k="alerts">
+      <h3>Open alerts</h3>
+      <p class="value" id="kAlerts">0</p>
+      <p class="sub" id="kAlertsSub">none</p>
+      <div class="bar"><i id="barAlerts"></i></div>
+    </article>
+  </section>
+
+  <!-- ================= Field map ================= -->
+  <section class="panel span-2" aria-label="Field map">
+    <div class="panel-head">
+      <h2>Field map</h2>
+      <div class="layer-switch" role="group" aria-label="Map layer">
+        <button data-layer="moisture" class="on">Moisture</button>
+        <button data-layer="pest">Pest</button>
+        <button data-layer="health">Health</button>
+        <button data-layer="disease">Disease</button>
+        <button data-layer="crop">Crop</button>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="map-wrap">
+      <svg id="fieldMap" viewBox="0 0 580 430" preserveAspectRatio="xMidYMid meet"
+           role="img" aria-label="Farm map with plots, irrigation zones and the drone"></svg>
+      <div class="tip" id="mapTip" hidden></div>
+    </div>
+  </section>
+
+  <!-- ================= Weather ================= -->
+  <section class="panel" aria-label="Weather station">
+    <div class="panel-head"><h2>Weather station</h2><span class="tag" id="wsId">ws-main</span></div>
+    <div class="readouts" id="weatherReadouts"></div>
+    <h3 class="mini-head">Irrigation &amp; solar drive</h3>
+    <canvas id="weatherChart" height="120"></canvas>
+    <p class="hint" id="weatherHint">—</p>
+  </section>
+
+  <!-- ================= Drone ================= -->
+  <section class="panel" aria-label="Drone">
+    <div class="panel-head">
+      <h2>Spray drone</h2>
+      <span class="tag" id="droneState">idle</span>
+    </div>
+    <div class="drone-grid">
+      <div class="drone-map">
+        <svg id="droneMap" viewBox="0 0 580 430" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+      <div class="drone-info">
+        <dl id="droneStats"></dl>
+        <div class="gauge"><label>Battery</label><div class="bar"><i id="gaugeBattery"></i></div><span id="gaugeBatteryTxt">—</span></div>
+        <div class="gauge"><label>Payload</label><div class="bar"><i id="gaugePayload"></i></div><span id="gaugePayloadTxt">—</span></div>
+        <div class="btn-row">
+          <button id="btnMission" class="primary">Plan mission (worst plots)</button>
+          <button id="btnRth">Return home</button>
+        </div>
+        <p class="hint" id="droneHint">—</p>
+      </div>
+    </div>
+    <div class="mission-table-wrap">
+      <table class="mission-table">
+        <thead><tr><th>Mission</th><th>Trigger</th><th>Plots</th><th>Area</th><th>Litres</th><th>Coverage</th><th>Sorties</th><th>Status</th></tr></thead>
+        <tbody id="missionRows"><tr class="empty"><td colspan="8">No missions yet</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================= Cameras ================= -->
+  <section class="panel span-2" aria-label="Plant cameras">
+    <div class="panel-head">
+      <h2>Plant cameras</h2>
+      <span class="tag" id="camTag">—</span>
+    </div>
+    <div class="cam-grid" id="camGrid"></div>
+  </section>
+
+  <!-- ================= Irrigation ================= -->
+  <section class="panel" aria-label="Irrigation">
+    <div class="panel-head">
+      <h2>Water system</h2>
+      <span class="tag" id="pumpTag">pump off</span>
+    </div>
+    <div class="zone-list" id="zoneList"></div>
+    <dl class="kv" id="waterStats"></dl>
+    <canvas id="waterChart" height="110"></canvas>
+    <p class="hint">Water actually pumped, per simulated hour. A zone opens when its
+      driest plot stays below the low threshold for two consecutive ticks, and closes
+      once the block is back near field capacity.</p>
+  </section>
+
+  <!-- ================= Automation log ================= -->
+  <section class="panel" aria-label="Automation decisions">
+    <div class="panel-head">
+      <h2>Automation decisions</h2>
+      <a class="ghost-link" href="/simulation">tune rules →</a>
+    </div>
+    <ul class="decisions" id="decisions"></ul>
+    <p class="hint">Every rule that acts, holds or waits — including the interlock
+      that stopped it. A hold is information, not silence.</p>
+  </section>
+
+  <!-- ================= Alerts ================= -->
+  <section class="panel" aria-label="Alerts">
+    <div class="panel-head">
+      <h2>Alerts</h2>
+      <button id="btnAckAll" class="ghost">Acknowledge all</button>
+    </div>
+    <ul class="alerts" id="alerts"></ul>
+  </section>
+
+  <!-- ================= Devices ================= -->
+  <section class="panel span-2" aria-label="Device fleet">
+    <div class="panel-head">
+      <h2>Connected devices</h2>
+      <div class="filter-row" id="deviceFilter" role="group" aria-label="Device kind filter"></div>
+    </div>
+    <div class="device-table-wrap">
+      <table class="device-table">
+        <thead><tr><th>Device</th><th>Kind</th><th>Area</th><th>Vendor / model</th><th>Status</th><th>Battery</th><th>Signal</th><th>Topic</th></tr></thead>
+        <tbody id="deviceRows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================= Charts ================= -->
+  <section class="panel span-2" aria-label="Trends">
+    <div class="panel-head">
+      <h2>Trends</h2>
+      <div class="chart-picker" id="chartPicker" role="group" aria-label="Chart series"></div>
+      <span class="tag" id="trendTag">—</span>
+    </div>
+    <canvas id="trendChart" height="240"></canvas>
+  </section>
+
+</main>
+
+<footer>
+  <span id="footStats">—</span>
+  <span class="grow"></span>
+  <span id="footTopic">agri/green-valley-01/#</span>
+</footer>
+
+<script type="module" src="/static/js/dashboard.js"></script>
+</body>
+</html>

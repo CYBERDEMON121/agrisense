@@ -1,0 +1,8 @@
+# AgriSense runtime dependencies.
+# Deliberately small: no OpenCV (the detector is a numpy HSV pipeline), no MQTT
+# client (the bus is simulated in-process, with a broker seam in bus.py).
+
+fastapi>=0.115
+uvicorn[standard]>=0.30
+numpy>=2.0
+pillow>=10.4
